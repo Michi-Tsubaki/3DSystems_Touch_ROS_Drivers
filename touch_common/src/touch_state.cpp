@@ -234,14 +234,33 @@ private:
     std::string device_name;
     this->declare_parameter("device_name", "Default Device");
     device_name = this->get_parameter("device_name").as_string();
-    HDstring target_dev = device_name.c_str();
+    const bool use_default_device = device_name.empty() || device_name == "Default Device";
+    HDstring target_dev = use_default_device ? HD_DEFAULT_DEVICE : device_name.c_str();
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Initializing haptic device with config [%s].",
+      use_default_device ? "Default Device" : device_name.c_str());
     hHD = hdInitDevice(target_dev);
     if (HD_DEVICE_ERROR(error = hdGetError())) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to initialize haptic device");
+      const HDstring error_string = hdGetErrorString(error.errorCode);
+      RCLCPP_ERROR(
+        this->get_logger(),
+        "Failed to initialize haptic device [%s]: %s (code=0x%04x, internal=%d)",
+        use_default_device ? "Default Device" : device_name.c_str(),
+        error_string ? error_string : "unknown error",
+        static_cast<unsigned int>(error.errorCode),
+        error.internalErrorCode);
       cleanup_resources();
       throw std::runtime_error("Failed to initialize haptic device");
     }
-    RCLCPP_INFO(this->get_logger(), "Found %s.", hdGetString(HD_DEVICE_MODEL_TYPE));
+    const HDstring model_type = hdGetString(HD_DEVICE_MODEL_TYPE);
+    const HDstring serial_number = hdGetString(HD_DEVICE_SERIAL_NUMBER);
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Connected haptic device config [%s], model [%s], serial [%s].",
+      use_default_device ? "Default Device" : device_name.c_str(),
+      model_type ? model_type : "unknown",
+      serial_number ? serial_number : "unknown");
     hdEnable(HD_FORCE_OUTPUT);
     hdStartScheduler();
     if (HD_DEVICE_ERROR(error = hdGetError())) {
